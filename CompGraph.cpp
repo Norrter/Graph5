@@ -8,21 +8,21 @@
 #include "GL/glew.h"
 #include "GLFW/glfw3.h"
 #include <iostream>
+#include "Model.h"
 
-glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-glm::vec3 cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 5.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
 float yaw = -90.0f;
 float pitch = 0.0f;
-float lastX = 256.0f;
-float lastY = 256.0f;
+float lastX = 512.0f;
+float lastY = 512.0f;
 bool firstMouse = true;
 float mouseSensitivity = 0.1f;
-
 float cameraSpeed = 0.005f;
 
-glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 lightColor = glm::vec3(1.0f, 0.8f, 0.6f);
 
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 {
@@ -69,11 +69,13 @@ void processInput(GLFWwindow* window)
         cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
 }
 
 int main()
 {
-    std::cout << "Hello triangle with camera!\n";
+    std::cout << "3D Model Viewer with Assimp\n";
     std::cout << "Controls: WASD - move, Mouse - look around, ESC - exit\n";
 
     glfwInit();
@@ -88,7 +90,7 @@ int main()
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* MyWindow = glfwCreateWindow(512, 512, "My window - Camera Lab4", NULL, NULL);
+    GLFWwindow* MyWindow = glfwCreateWindow(1024, 768, "My window - Camera Lab4", NULL, NULL);
 
     if (!MyWindow) {
         glfwTerminate();
@@ -107,24 +109,6 @@ int main()
         return 1;
     }
 
-
-    float point[] = {
-        0.0f,  0.5f, 0.0f,
-       -0.5f, -0.5f, 0.0f,
-        0.5f, -0.5f, 0.0f
-    };
-
-    GLuint vAo, vBo;
-    glGenVertexArrays(1, &vAo);
-    glGenBuffers(1, &vBo);
-
-    glBindVertexArray(vAo);
-    glBindBuffer(GL_ARRAY_BUFFER, vBo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(point), point, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glBindVertexArray(0);
-
     const char* vert_shader =
         "#version 460 \n"
         "layout (location=0) in vec3 vp;"
@@ -137,10 +121,10 @@ int main()
 
     const char* frag_shader =
         "#version 460 \n"
-        "uniform vec4 ourColour;"
+        "uniform vec3 lightColor;"
         "out vec4 frag_colour;"
         "void main() {"
-        " frag_colour = ourColour;"
+        " frag_colour = vec4(lightColor, 1.0);"
         "}";
 
     GLuint vesrts = glCreateShader(GL_VERTEX_SHADER);
@@ -175,20 +159,38 @@ int main()
         fprintf(stderr, "SHADER LINK ERROR: %s \n", infoLog);
     }
 
+    glDeleteShader(vesrts);
+    glDeleteShader(frags);
     glEnable(GL_DEPTH_TEST);
+
+    Model ourModel("model.obj");
+
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::scale(model, glm::vec3(0.5f));
+
+    int screenWidth, screenHeight;
+    glfwGetFramebufferSize(MyWindow, &screenWidth, &screenHeight);
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f),
+        (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
 
     int modelLoc = glGetUniformLocation(shader_program, "model");
     int viewLoc = glGetUniformLocation(shader_program, "view");
     int projLoc = glGetUniformLocation(shader_program, "projection");
-    int colorLoc = glGetUniformLocation(shader_program, "ourColour");
-
-    glm::mat4 model = glm::mat4(1.0f);
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1.0f, 0.1f, 100.0f);
+    int lightColorLoc = glGetUniformLocation(shader_program, "lightColor");
 
     while (!glfwWindowShouldClose(MyWindow)) {
         processInput(MyWindow);
-
         glfwPollEvents();
+
+        int newWidth, newHeight;
+        glfwGetFramebufferSize(MyWindow, &newWidth, &newHeight);
+        if (newWidth != screenWidth || newHeight != screenHeight) {
+            screenWidth = newWidth;
+            screenHeight = newHeight;
+            glViewport(0, 0, screenWidth, screenHeight);
+            projection = glm::perspective(glm::radians(45.0f),
+                (float)screenWidth / (float)screenHeight, 0.1f, 100.0f);
+        }
 
         glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -201,20 +203,15 @@ int main()
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-        glUniform4f(colorLoc, 0.0f, 1.0f, 0.0f, 1.0f);
 
-        glBindVertexArray(vAo);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glUniform3fv(lightColorLoc, 1, glm::value_ptr(lightColor));
+
+        ourModel.Draw(shader_program);
 
         glfwSwapBuffers(MyWindow);
     }
 
-    glDeleteVertexArrays(1, &vAo);
-    glDeleteBuffers(1, &vBo);
     glDeleteProgram(shader_program);
-    glDeleteShader(vesrts);
-    glDeleteShader(frags);
-
     glfwTerminate();
     return 0;
 }
