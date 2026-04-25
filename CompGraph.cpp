@@ -22,7 +22,7 @@ bool firstMouse = true;
 float mouseSensitivity = 0.1f;
 float cameraSpeed = 0.005f;
 
-glm::vec3 lightColor = glm::vec3(1.0f, 0.8f, 0.6f);
+glm::vec3 lightColor = glm::vec3(0.5f, 0.3f, 1.0f);
 
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 {
